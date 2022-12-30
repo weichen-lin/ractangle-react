@@ -1,0 +1,28 @@
+html {
+  margin: 0;
+  padding: 10%;
+}
+
+.container {
+  display: flex;
+  background-color: rgba(195, 227, 210, 0.8);
+}
+
+.box {
+  border: 2px solid red;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  margin: 30px;
+  user-select: none;
+}
+
+.select-area {
+  border: 1px solid rgba(20, 20, 20, 0.06);
+  background-color: rgba(20, 20, 20, 0.06);
+  border-radius: 5px;
+}
+
+.selected {
+  background-color: aqua;
+}
