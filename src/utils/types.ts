@@ -1,9 +1,10 @@
 export interface selectionStore {
-  stored: number[]
+  stored: string[]
+  dragStored: Element[]
   canSelected: Element[]
   changed: {
-    added: number[]
-    removed: number[]
+    added: string[]
+    removed: string[]
   }
 }
 
@@ -11,5 +12,5 @@ export interface selectionParams {
   boundary: HTMLDivElement
   selectAreaClassName: string
   selectablePrefix: string
-  cb: (...args: any[]) => any
+  select_cb: (...args: any[]) => any
 }
