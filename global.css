@@ -10,8 +10,8 @@ html {
 
 .box {
   border: 2px solid red;
-  width: 72px;
-  height: 72px;
+  width: 108px;
+  height: 108px;
   padding: 0;
   margin: 30px;
   user-select: none;

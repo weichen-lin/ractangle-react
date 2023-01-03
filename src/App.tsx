@@ -2,9 +2,13 @@ import React, { createRef, useEffect, useState } from 'react'
 import addCss from './utils/addCss'
 import intersects from './utils/intersects'
 import checkClickStatus from './utils/clickStatus'
-import { cloneTargetIntoDragList } from './utils/cloneCurrent'
 
-import { selectionStore, selectionParams } from './utils/types'
+import {
+  selectionStore,
+  selectionParams,
+  selectedElement,
+  StoreAction
+} from './utils/types'
 
 class Selectable {
   private readonly _selectContainer: HTMLElement
@@ -17,17 +21,18 @@ class Selectable {
   private _gonnaStartDrag: boolean = false
   private _isDragging: boolean = false
   private cacheLastElement: string = ''
+  private _draggingElement: Element | null = null
   private readonly _initMouseDown = new DOMRect()
   private readonly select_cb: (...args: any[]) => any
 
   private _selectionStore: selectionStore = {
     stored: [],
     dragStored: [],
-    canSelected: [],
+    canSelected: new Map<string, selectedElement>(),
     changed: {
       added: [], // Added elements since last selection
-      removed: [], // Removed elements since last selection
-    },
+      removed: [] // Removed elements since last selection
+    }
   }
 
   constructor(params: selectionParams) {
@@ -38,7 +43,7 @@ class Selectable {
     this._selectBoundary = params.boundary
 
     this._dragContainer = this._document.createElement('div')
-
+    this._dragContainer.id = 'dragContainer'
     this.select_cb = params.select_cb
 
     // stying area
@@ -47,7 +52,7 @@ class Selectable {
       position: 'fixed',
       transform: 'translate3d(0, 0, 0)', // https://stackoverflow.com/a/38268846
       pointerEvents: 'none',
-      zIndex: '1',
+      zIndex: '1'
     })
 
     addCss(this._selectArea, {
@@ -57,7 +62,7 @@ class Selectable {
       position: 'fixed',
       width: 0,
       height: 0,
-      display: 'none',
+      display: 'none'
     })
 
     addCss(this._dragContainer, {
@@ -69,7 +74,7 @@ class Selectable {
       width: '100%',
       height: '100%',
       top: 0,
-      left: 0,
+      left: 0
     })
 
     this._document.body.appendChild(this._selectContainer)
@@ -77,58 +82,24 @@ class Selectable {
 
     this._document.addEventListener('mousedown', this.onMouseDown)
     this._document.addEventListener('mouseup', this.onMouseUp)
-    this._document.addEventListener('mousemove', this.onMouseMove)
+    // this._document.addEventListener('mousemove', this.onMouseMove)
   }
 
   onMouseDown = (evt: MouseEvent) => {
     const { clientX, clientY } = evt
     this._initMouseDown.x = clientX
     this._initMouseDown.y = clientY
-    const selecatables: Element[] = Array.from(
-      this._document.querySelectorAll('.selectable')
-    )
-    this._selectionStore.canSelected = selecatables
-    const { isCtrlKey, isClickOnSelectable, onClickElement } = checkClickStatus(
-      evt,
-      this._selectionStore.canSelected
-    )
 
-    if (isCtrlKey && isClickOnSelectable) {
-      this._needClearStored = false
-      if (this._selectionStore.stored.includes(onClickElement)) {
-        const currentIndex = this._selectionStore.stored.indexOf(onClickElement)
-        this._selectionStore.stored.splice(currentIndex, 1)
-        this._selectionStore.changed.removed.push(onClickElement)
-      } else {
-        this._selectionStore.changed.added.push(onClickElement)
-        this._selectionStore.stored.push(onClickElement)
-      }
+    this._document.querySelectorAll('.selectable').forEach((e) => {
+      const key = e.getAttribute('data-key')
+      if (!key) return
+      this._selectionStore.canSelected.set(key, { element: e })
+    })
 
-      this.select_cb(this._selectionStore)
+    const { isCtrlKey, isClickOnSelectable, onClickElement } =
+      checkClickStatus(evt)
 
-      this._selectionStore.changed.added.length = 0
-      this._selectionStore.changed.removed.length = 0
-    } else if (!isCtrlKey && isClickOnSelectable) {
-      this._needClearStored = true
-      this._gonnaStartDrag = true
-
-      if (!this._selectionStore.stored.includes(onClickElement)) {
-        this.cacheLastElement = onClickElement
-      }
-      if (this._selectionStore.stored.includes(onClickElement)) {
-        const currentIndex = this._selectionStore.stored.indexOf(onClickElement)
-        this._selectionStore.stored.splice(currentIndex, 1)
-        this._selectionStore.changed.removed.push(onClickElement)
-      } else {
-        this._selectionStore.changed.added.push(onClickElement)
-        this._selectionStore.stored.push(onClickElement)
-      }
-
-      this.select_cb(this._selectionStore)
-
-      this._selectionStore.changed.added.length = 0
-      this._selectionStore.changed.removed.length = 0
-    } else if (!isClickOnSelectable) {
+    if (!onClickElement) {
       this._needClearStored = true
       const { x, y, right, bottom } =
         this._selectBoundary.getBoundingClientRect()
@@ -138,17 +109,62 @@ class Selectable {
           top: y,
           left: x,
           width: right - x,
-          height: bottom - y,
+          height: bottom - y
         })
       }
+      this._document.addEventListener('mousemove', this.onMouseMove)
+      return
     }
 
-    this.makeElementShadow(evt)
+    if (isCtrlKey && isClickOnSelectable) {
+      this.storeManipulate(onClickElement, (e: string) => {
+        return this._selectionStore.stored.includes(e)
+          ? StoreAction.Delete
+          : StoreAction.Add
+      })
+    } else if (!isCtrlKey && isClickOnSelectable) {
+      const isStoredAlready =
+        this._selectionStore.stored.includes(onClickElement)
+
+      if (!isStoredAlready) {
+        const currentElement = Array.from(this._selectionStore.stored)
+        this.storeManipulate(currentElement, (e: string) => {
+          return this._selectionStore.stored.includes(e)
+            ? StoreAction.Delete
+            : StoreAction.Add
+        })
+        this.storeManipulate(onClickElement, (e: string) => {
+          return this._selectionStore.stored.includes(e)
+            ? StoreAction.Delete
+            : StoreAction.Add
+        })
+        return
+      }
+      this.cacheLastElement = onClickElement
+      this._gonnaStartDrag = true
+      this._selectionStore.stored.forEach((key) => {
+        const ele = this._selectionStore.canSelected.get(key)
+        if (!ele) return
+        const { x, y } = ele.element.getBoundingClientRect()
+        const cloned = ele.element.cloneNode(true)
+        addCss(cloned as HTMLElement, {
+          position: 'fixed',
+          top: y - 30,
+          left: x - 30,
+          transitionDuration: '0.5s',
+          opacity: '100%',
+          transitionProperty: 'width height top left opacity'
+        })
+        this._dragContainer.appendChild(cloned)
+      })
+      this._document.addEventListener('mousemove', this.onDelayMove)
+    }
   }
 
   onMouseUp = () => {
     this._isMouseDownAtSelectBoundary = false
     this._gonnaStartDrag = false
+    this._selectionStore.canSelected.clear()
     addCss(this._selectArea, {
       willChange: 'top, left, bottom, right, width, height',
       top: 0,
@@ -156,25 +172,27 @@ class Selectable {
       position: 'fixed',
       width: 0,
       height: 0,
-      display: 'none',
+      display: 'none'
     })
 
     if (this._needClearStored) {
       this._selectionStore.stored.length = 0
-
-      if (this.cacheLastElement !== '') {
-        this._selectionStore.stored.push(this.cacheLastElement)
-      }
       this.select_cb(this._selectionStore)
     }
 
     this._needClearStored = false
     this._gonnaStartDrag = false
     this.cacheLastElement = ''
+    this._dragContainer.replaceChildren()
+    this._document.removeEventListener('mousemove', this.onDelayMove)
+
+    // this._document.addEventListener('mousemove', this.onMouseMove)
+    // this._document.removeEventListener('mousemove', this.onDelayMove)
   }
 
   onMouseMove = (evt: MouseEvent) => {
     this._needClearStored = false
+    const { pageX, pageY } = evt
 
     if (this._isMouseDownAtSelectBoundary) {
       const { clientX, clientY } = evt
@@ -187,62 +205,31 @@ class Selectable {
         height: clientY >= y ? clientY - y : y - clientY,
         top: clientY >= y ? y - boundary_y : clientY - boundary_y,
         left: clientX >= x ? x - boundary_x : clientX - boundary_x,
-        display: 'block',
+        display: 'block'
       })
 
-      for (let i = 0; i < this._selectionStore.canSelected.length; i++) {
-        const currentElement = this._selectionStore.canSelected[i]
-        const currentElementPrefix =
-          currentElement.getAttribute('data-key') ?? 'default'
+      const elements = Array.from(this._selectionStore.canSelected.keys())
 
-        if (intersects(this._selectArea, currentElement)) {
-          if (this._selectionStore.stored.includes(currentElementPrefix)) {
-            continue
+      this.storeManipulate(elements, (e: string) => {
+        const ele = this._selectionStore.canSelected.get(e)?.element
+        if (!ele) return StoreAction.Pass
+        if (intersects(this._selectArea, ele)) {
+          if (this._selectionStore.stored.includes(e)) {
+            return StoreAction.Pass
           } else {
-            this._selectionStore.changed.added.push(currentElementPrefix)
-            this._selectionStore.stored.push(currentElementPrefix)
+            return StoreAction.Add
           }
         } else {
-          if (this._selectionStore.stored.includes(currentElementPrefix)) {
-            const currentIndex =
-              this._selectionStore.stored.indexOf(currentElementPrefix)
-            this._selectionStore.stored.splice(currentIndex, 1)
-            this._selectionStore.changed.removed.push(currentElementPrefix)
+          if (this._selectionStore.stored.includes(e)) {
+            return StoreAction.Delete
           } else {
-            continue
+            return StoreAction.Pass
           }
         }
-      }
-      this.select_cb(this._selectionStore)
-      this._selectionStore.changed.added.length = 0
-      this._selectionStore.changed.removed.length = 0
+      })
     }
 
     if (this._gonnaStartDrag) {
-      const { pageX, pageY } = evt
-      this._selectionStore.dragStored.forEach((cloned, index) => {
-        if (index === 1) {
-          addCss(cloned as HTMLElement, {
-            top: pageY - 20,
-            left: pageX - 25,
-            height: 30,
-            width: 30,
-            opacity: '0%',
-            transitionDuration: '0.2s',
-            transitionProperty: 'width height top left',
-          })
-        } else {
-          addCss(cloned as HTMLElement, {
-            top: pageY - 20,
-            left: pageX - 25,
-            height: 20,
-            width: 20,
-            opacity: '0%',
-            transitionDuration: '0.2s',
-            transitionProperty: 'width height top left',
-          })
-        }
-      })
       this._document.removeEventListener('mousemove', this.onMouseMove)
       this._document.addEventListener('mousemove', this.onDelayMove)
     }
@@ -250,41 +237,86 @@ class Selectable {
 
   onDelayMove = (evt: MouseEvent) => {
     const { pageX, pageY } = evt
-    if (this._selectionStore.dragStored.length >= 1) {
-      addCss(this._selectionStore.dragStored[0] as HTMLElement, {
-        top: pageY - 20,
-        left: pageX - 25,
-        height: 20,
-        width: 20,
-        opacity: '20%',
-        transitionDuration: '0s',
-        transitionDelay: '0s',
-        transitionProperty: 'width height top left',
+    this._initMouseDown.x = pageX - 30
+    this._initMouseDown.y = pageY - 30
+
+    this._document
+      .querySelectorAll('#dragContainer > div')
+      .forEach((ele, index) => {
+        if (index === 0) {
+          this._draggingElement = ele
+        }
+        addCss(ele as HTMLElement, {
+          position: 'fixed',
+          top: pageY - 30,
+          left: pageX - 30,
+          height: 24,
+          // width: 24,
+          opacity: index > 0 ? '70%' : '90%',
+          transitionDuration: '0.2s',
+          transitionProperty: 'width height top left opacity',
+          zIndex: index > 0 ? '1' : '10'
+        })
       })
-    }
+    this._document.removeEventListener('mousemove', this.onDelayMove)
+    this._document.addEventListener('mousemove', this.onTestingMove)
   }
 
-  makeElementShadow = (evt: MouseEvent) => {
-    this._dragContainer.replaceChildren()
-    this._selectionStore.dragStored.length = 0
-    this._selectionStore.stored.forEach((e) => {
-      const ele = this._selectionStore.canSelected.find(
-        (ele) => ele.getAttribute('data-key') === e
-      )
-      if (!ele) return
-      const { x, y } = ele.getBoundingClientRect()
-      const cloned = ele.cloneNode(true) as HTMLElement
-      addCss(cloned, {
-        position: 'fixed',
-        top: y - 25,
-        left: x - 25,
-        transitionProperty: 'all',
-        display: 'block',
-        // transitionDelay: '0.5s',
+  onTestingMove = (evt: MouseEvent) => {
+    const { pageX, pageY } = evt
+    this._initMouseDown.x = pageX - 30
+    this._initMouseDown.y = pageY - 30
+
+    this._document
+      .querySelectorAll('#dragContainer > div')
+      .forEach((ele, index) => {
+        if (index === 0) {
+          this._draggingElement = ele
+        }
+        addCss(ele as HTMLElement, {
+          position: 'fixed',
+          top: pageY - 30,
+          left: pageX - 30,
+          height: 24,
+          opacity: index > 0 ? '10%' : '90%',
+          transitionDuration: '0.1s',
+          transitionProperty: 'width height top left opacity',
+          zIndex: index > 0 ? '1' : '10',
+          boxShadow:
+            'rgba(50, 50, 93, 0.25) 0px 50px 100px -20px, rgba(0, 0, 0, 0.3) 0px 30px 60px -30px, rgba(10, 37, 64, 0.35) 0px -2px 6px 0px inset'
+        })
       })
-      this._dragContainer.appendChild(cloned)
-      this._selectionStore.dragStored.push(cloned)
-    })
+  }
+
+  storeManipulate = (
+    e: string | string[],
+    checkerFunc: (e: string) => number
+  ) => {
+    const elements = Array.isArray(e) ? e : [e]
+    for (const e of elements) {
+      const checker = checkerFunc(e)
+
+      switch (checker) {
+        case StoreAction.Pass:
+          break
+        case StoreAction.Add:
+          this._selectionStore.changed.added.push(e)
+          this._selectionStore.stored.push(e)
+          break
+        case StoreAction.Delete:
+          const currentIndex = this._selectionStore.stored.indexOf(e)
+          this._selectionStore.stored.splice(currentIndex, 1)
+          this._selectionStore.changed.removed.push(e)
+          break
+        default:
+          break
+      }
+    }
+
+    this.select_cb(this._selectionStore)
+
+    this._selectionStore.changed.added.length = 0
+    this._selectionStore.changed.removed.length = 0
   }
 }
 
@@ -304,7 +336,7 @@ const App = () => {
 
   const handleSelected = ({
     stored,
-    changed: { added, removed },
+    changed: { added, removed }
   }: SelectionEvent) => {
     const newSelected = new Set<string>(stored)
     added.forEach((e) => newSelected.add(e))
@@ -318,7 +350,7 @@ const App = () => {
       boundary: root?.current as HTMLDivElement,
       selectAreaClassName: 'selection-area',
       selectablePrefix: 'selectable',
-      select_cb: handleSelected,
+      select_cb: handleSelected
     })
   }, [])
 

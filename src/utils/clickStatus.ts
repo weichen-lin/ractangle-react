@@ -1,8 +1,9 @@
-export default (evt: MouseEvent, canSelected: Element[]) => {
+export default (evt: MouseEvent) => {
   const target = evt.target as Element
+  const key = target.getAttribute('data-key')
   return {
-    isCtrlKey: evt.ctrlKey,
-    isClickOnSelectable: canSelected.includes(target),
-    onClickElement: target.getAttribute('data-key') ?? '',
+    isCtrlKey: evt.ctrlKey || evt.metaKey,
+    isClickOnSelectable: key ? true : false,
+    onClickElement: key
   }
 }
