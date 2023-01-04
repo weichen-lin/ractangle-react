@@ -7,7 +7,8 @@ import {
   selectionStore,
   selectionParams,
   selectedElement,
-  StoreAction
+  StoreAction,
+  TransformMethod
 } from './utils/types'
 
 class Selectable {
@@ -23,6 +24,7 @@ class Selectable {
   private readonly _initMouseDown = new DOMRect()
   private readonly select_cb: (...args: any[]) => any
   private readonly drag_cb: (...args: any[]) => any
+  private readonly transformFunc: TransformMethod
 
   private _selectionStore: selectionStore = {
     stored: [],
@@ -45,6 +47,7 @@ class Selectable {
     this._dragContainer.id = 'dragContainer'
     this.select_cb = params.select_cb
     this.drag_cb = params.drag_cb
+    this.transformFunc = params.transformFunc
 
     // stying area
     addCss(this._selectContainer, {
@@ -151,17 +154,29 @@ class Selectable {
       this._selectionStore.stored.forEach((key) => {
         const ele = this._selectionStore.canSelected.get(key)
         if (!ele) return
-        const { x, y } = ele.element.getBoundingClientRect()
-        // const { pageX, pageY } = evt
+        const { x, y, right, bottom } = ele.element.getBoundingClientRect()
 
         const cloned = ele.element.cloneNode(true)
         addCss(cloned as HTMLElement, {
           position: 'fixed',
-          top: y - 30,
-          left: x - 30,
+          top: y,
+          left: x,
+          margin: 0,
           opacity: '100%',
           willChange: 'top left width height'
         })
+        addCss(this._dragContainer as HTMLElement, {
+          position: 'fixed',
+          top: this._initMouseDown.y,
+          left: this._initMouseDown.x,
+          width: right - x,
+          height: bottom - y,
+          backgroundColor: 'red',
+          margin: 0,
+          opacity: '100%',
+          willChange: 'top left width height'
+        })
+
         this._dragContainer.appendChild(cloned)
       })
       this._document.addEventListener('mousemove', this.onDelayMove)
@@ -351,13 +366,28 @@ const App = () => {
     setDragged(newSelected)
   }
 
+  const handleTransform = (
+    e: Element,
+    css: Partial<Record<keyof CSSStyleDeclaration, string | number>>
+  ) => {
+    return e
+  }
+
+  const handleRevert = (
+    e: Element,
+    css: Partial<Record<keyof CSSStyleDeclaration, string | number>>
+  ) => {
+    return e
+  }
+
   useEffect(() => {
     const a = new Selectable({
       boundary: root?.current as HTMLDivElement,
       selectAreaClassName: 'selection-area',
       selectablePrefix: 'selectable',
       select_cb: handleSelected,
-      drag_cb: handleDragged
+      drag_cb: handleDragged,
+      transformFunc: { transform: handleTransform, revert: handleRevert }
     })
   }, [])
 

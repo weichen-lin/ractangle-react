@@ -19,10 +19,22 @@ export interface selectionParams {
   selectablePrefix: string
   select_cb: (...args: any[]) => any
   drag_cb: (...args: any[]) => any
+  transformFunc: TransformMethod
 }
 
 export enum StoreAction {
   Pass,
   Add,
   Delete
+}
+
+export interface TransformMethod {
+  transform: (
+    e: Element,
+    css: Partial<Record<keyof CSSStyleDeclaration, string | number>>
+  ) => Element
+  revert: (
+    e: Element,
+    css: Partial<Record<keyof CSSStyleDeclaration, string | number>>
+  ) => Element
 }
