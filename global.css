@@ -26,3 +26,7 @@ html {
 .selected {
   background-color: aqua;
 }
+
+.onDrag {
+  opacity: 0.4;
+}

@@ -1,5 +1,6 @@
 export interface selectedElement {
   element: Element
+  memorizePosition: Partial<DOMRect>
 }
 
 export interface selectionStore {
@@ -17,6 +18,7 @@ export interface selectionParams {
   selectAreaClassName: string
   selectablePrefix: string
   select_cb: (...args: any[]) => any
+  drag_cb: (...args: any[]) => any
 }
 
 export enum StoreAction {
