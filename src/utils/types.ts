@@ -28,13 +28,13 @@ export enum StoreAction {
   Delete
 }
 
+interface TransformMaterial {
+  func: (e: Element) => Element
+  css: Partial<Record<keyof CSSStyleDeclaration, string | number>>
+}
+
 export interface TransformMethod {
-  transform: (
-    e: Element,
-    css: Partial<Record<keyof CSSStyleDeclaration, string | number>>
-  ) => Element
-  revert: (
-    e: Element,
-    css: Partial<Record<keyof CSSStyleDeclaration, string | number>>
-  ) => Element
+  transform: TransformMaterial
+  revert: TransformMaterial
+  iconPositionX: number
 }
